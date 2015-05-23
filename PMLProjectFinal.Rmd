@@ -1,0 +1,82 @@
+---
+title: "Practical Machine Learning Project"
+author: "Prady Misra"
+date: "Saturday, May 23, 2015"
+output: html_document
+---
+
+###Executive Summary
+
+We have a dataset that contains data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants who were asked to perform barbell lifts correctly and incorrectly in 5 different ways. See http://groupware.les.inf.puc-rio.br/har for more details. The goal of this exercise is to use this data and build a prediction model to predict the manner in which they did the exercise. The report documents briefly how I built the model, used cross validation,calculated expected out of sample error, and rationale behind my choices. I used this prediction model to predict 20 different test cases. 
+
+###Exploratory Analysis and Clean-up
+
+Download the datasets. Poke around using Excel and R commands like summary, str etc.
+```{r, DownloadData}
+fileurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+if (!file.exists("pml-training.csv")) {
+  download.file(fileurl, destfile = "pml-training.csv")
+}
+fileurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+if (!file.exists("pml-testing.csv")) {
+  download.file(fileurl, destfile = "pml-testing.csv")
+}
+rm(fileurl)
+```
+
+Read the two files and replace all #DIV/0 errors and blanks by NAs. Also remove all columns with NAs and those that have no prediction values like names, ids etc.
+```{r, CleanData}
+pmltrain <- read.csv("pml-training.csv",na.strings=c("","NA","#DIV/0!"))
+pmltest  <- read.csv("pml-testing.csv" ,na.strings=c("","NA","#DIV/0!"))
+pmltrain <- pmltrain[ , colSums(is.na(pmltrain)) == 0]
+pmltrain <- pmltrain[,-c(1:7)]
+pmltest <- pmltest[ , colSums(is.na(pmltest)) == 0]
+pmltest <- pmltest[,-c(1:7)]
+```
+###Build and Test Model
+Let's first split the training dataset into 2 for model building and testing.
+```{r, SplitTrainingData}
+require(caret)
+require(randomForest)
+set.seed(12321)
+inTrain  <- createDataPartition (y=pmltrain$classe, p=0.75, list=FALSE)
+training <- pmltrain[inTrain,]
+testing  <- pmltrain[-inTrain,]
+predictors <- training[-ncol(training)]
+rm (inTrain)
+```
+Now build the model using Random Forest algorithm.
+```{r, BuildModel}
+modelFit <- randomForest(predictors, training$classe, ntree=500)
+modelFit
+```
+Test the model on the training set for accuracy and in sample error estimates.
+```{r, TestModelTraining}
+predict.training <- predict(modelFit, newdata = training, type="class")
+confusionMatrix(predict.training,training$classe)
+```
+Test the model on the test set (set aside from the training set) for accuracy and out of sample error estimates.
+```{r, TestModelTesting}
+predict.testing <- predict(modelFit, newdata = testing, type="class")
+confusionMatrix(predict.testing,testing$classe)
+```
+The accuracy of this model is 0.9961 which means the error is very small 0.0039 and thus this is a very good model. Several other models I played with along with PCA etc. were nowhere near as accurate.
+
+### Use Model for Predictions
+We will use the model we just built and tested on the evaluation dataset provided that has 20 observations and used the script given in the project description to record and report these predictions. We need to clean-up the final test sets the same way we did the training set.
+```{r, Predictions}
+features <- colnames(pmltrain)
+pmltest <- pmltest[features[features!='classe']]
+predictions <- predict(modelFit, newdata = pmltest, type="class")
+predictions
+
+# Answer Submission
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(predictions)
+```
